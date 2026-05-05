@@ -1,113 +1,251 @@
 import streamlit as st
 import random
+from datetime import datetime
+import pandas as pd
 
 from core.trends import get_trend
 from core.scoring import calculate_opportunity
 
+from database import (
+    init_db,
+    create_user,
+    login_user,
+    get_plan,
+    save_analysis,
+    get_user_analyses
+)
+
+# -----------------------
+# INIT
+# -----------------------
+init_db()
+
 st.set_page_config(
-    page_title="Ad Intelligence SaaS",
+    page_title="Ad Intelligence PRO",
     page_icon="📊",
     layout="wide"
 )
 
 # -----------------------
-# HEADER
+# STATE
 # -----------------------
-st.title("📊 Ad Intelligence SaaS")
-st.caption("Analyse marché + opportunités publicitaires en temps réel")
+if "user" not in st.session_state:
+    st.session_state.user = None
+
+if "payment_success" not in st.session_state:
+    st.session_state.payment_success = False
+
+# -----------------------
+# AUTH
+# -----------------------
+if not st.session_state.user:
+
+    st.title("📊 Ad Intelligence SaaS")
+    st.caption("Analyse marché + opportunités publicitaires")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.subheader("Login")
+        u = st.text_input("Username")
+        p = st.text_input("Password", type="password")
+
+        if st.button("Login"):
+            user = login_user(u, p)
+            if user:
+                st.session_state.user = user[0]
+                st.rerun()
+            else:
+                st.error("Identifiants incorrects")
+
+    with col2:
+        st.subheader("Créer compte")
+        u2 = st.text_input("New username")
+        p2 = st.text_input("New password", type="password")
+
+        if st.button("Créer compte"):
+            if create_user(u2, p2):
+                st.success("Compte créé")
+            else:
+                st.error("Utilisateur déjà existant")
+
+    st.stop()
+
+# -----------------------
+# USER INFO
+# -----------------------
+user = st.session_state.user
+plan = "pro" if st.session_state.payment_success else get_plan(user)
+history = get_user_analyses(user)
+
+# -----------------------
+# HEADER PRO
+# -----------------------
+st.title("📊 Ad Intelligence PRO Dashboard")
+st.caption(f"👤 {user} • Plan: {plan.upper()}")
 
 st.divider()
 
 # -----------------------
-# INPUT
+# SIDEBAR
 # -----------------------
-keyword = st.text_input("🔍 Mot-clé à analyser", "sérum visage")
+st.sidebar.title("⚙️ Analyse")
+
+keyword = st.sidebar.text_input("Mot-clé", "sérum visage")
+mode = st.sidebar.selectbox("Mode analyse", ["Standard", "Avancé"])
+
+st.sidebar.divider()
+st.sidebar.info("💡 SaaS Marketing Intelligence Engine")
 
 # -----------------------
-# ACTION
+# LIMIT FREE
 # -----------------------
-if st.button("🚀 Lancer l'analyse"):
+if plan == "free" and len(history) >= 5:
+    st.error("❌ Limite Free atteinte (5 analyses)")
+    st.stop()
 
-    # DATA
+# -----------------------
+# ANALYSE
+# -----------------------
+if st.button("🚀 Lancer analyse", use_container_width=True):
+
     trend = get_trend(keyword)
     competition = max(5, min(100, int(100 - trend + random.randint(-10, 10))))
     opportunity, level = calculate_opportunity(trend, competition)
 
-    # PLATFORM LOGIC
-    if competition < 40 and trend > 40:
-        platform = "Meta Ads (Facebook / Instagram)"
-    elif trend > 60:
-        platform = "Google Ads (Search / Shopping)"
-    else:
-        platform = "TikTok Ads"
+    platform = (
+        "Meta Ads" if competition < 40 else
+        "Google Ads" if trend > 60 else
+        "TikTok Ads"
+    )
+
+    save_analysis({
+        "username": user,
+        "keyword": keyword,
+        "trend": trend,
+        "competition": competition,
+        "opportunity": opportunity,
+        "platform": platform,
+        "date": str(datetime.now())
+    })
 
     # -----------------------
-    # KPI CARDS
+    # KPI CARDS (PRO STYLE)
     # -----------------------
     col1, col2, col3, col4 = st.columns(4)
 
-    with col1:
-        st.metric("📈 Demande", f"{trend:.1f}")
-
-    with col2:
-        st.metric("📊 Concurrence", competition)
-
-    with col3:
-        st.metric("🧠 Opportunité", f"{opportunity:.1f}")
-
-    with col4:
-        st.metric("🎯 Plateforme", platform)
+    col1.metric("📈 Demande", f"{trend:.1f}")
+    col2.metric("📊 Concurrence", competition)
+    col3.metric("🧠 Opportunité", f"{opportunity:.1f}")
+    col4.metric("🎯 Plateforme", platform)
 
     st.divider()
 
     # -----------------------
-    # ANALYSIS SECTION
+    # GRAPH INSIGHT
     # -----------------------
-    st.subheader("🧠 Analyse marché")
+    st.subheader("📊 Évolution du marché")
 
-    if opportunity > 70:
-        st.success("🔥 Excellent marché : forte opportunité commerciale")
-    elif opportunity > 40:
-        st.warning("⚖️ Marché moyen : potentiel intéressant mais compétitif")
-    else:
-        st.error("⚠️ Marché difficile : faible opportunité")
+    data = [trend + random.randint(-8, 8) for _ in range(12)]
+    df = pd.DataFrame({"trend": data})
 
-    st.info(level)
+    st.line_chart(df)
 
     st.divider()
 
     # -----------------------
-    # STRATEGY SECTION
+    # ANALYSIS BLOCK
     # -----------------------
-    st.subheader("📌 Stratégie recommandée")
+    left, right = st.columns(2)
 
-    colA, colB = st.columns(2)
+    with left:
+        st.subheader("🧠 Analyse marché")
 
-    with colA:
-        st.markdown("### 🎯 Plateforme pub")
-        st.success(platform)
-
-        st.markdown("### 📊 Niveau de marché")
-        st.write(level)
-
-    with colB:
-        st.markdown("### 💡 Recommandation rapide")
-
-        if platform == "Meta Ads (Facebook / Instagram)":
-            st.write("- Créatifs visuels + UGC")
-            st.write("- Audience large + retargeting")
-
-        elif platform == "Google Ads (Search / Shopping)":
-            st.write("- Mots-clés intention achat")
-            st.write("- Landing page optimisée")
-
+        if opportunity > 70:
+            st.success("🔥 Marché excellent")
+        elif opportunity > 40:
+            st.warning("⚖️ Marché moyen")
         else:
-            st.write("- Vidéos courtes virales")
-            st.write("- Hook fort dans les 3 premières secondes")
+            st.error("⚠️ Marché difficile")
+
+        st.info(level)
+
+    with right:
+        st.subheader("📈 Score global")
+
+        score = (trend * 0.4 + (100 - competition) * 0.4 + opportunity * 0.2)
+
+        st.metric("Market Score", f"{score:.1f}/100")
+
+        if score > 70:
+            st.success("🔥 Fort potentiel de scalabilité")
+        elif score > 40:
+            st.warning("⚖️ Potentiel moyen")
+        else:
+            st.error("⚠️ Risque élevé")
 
     st.divider()
 
     # -----------------------
-    # FOOTER INSIGHT
+    # STRATEGY
     # -----------------------
-    st.caption("💡 Version SaaS MVP - Ad Intelligence Engine")
+    st.subheader("📌 Recommandation stratégique")
+
+    if trend < 30:
+        st.write("👉 Créer la demande (contenu / branding)")
+    elif trend > 60:
+        st.write("👉 Scaler rapidement (ads agressives)")
+    else:
+        st.write("👉 Tester et optimiser")
+
+# -----------------------
+# HISTORY
+# -----------------------
+st.divider()
+st.subheader("📚 Historique utilisateur")
+
+if history:
+    for row in history:
+        st.write(row)
+else:
+    st.info("Aucune donnée")
+
+# -----------------------
+# PAYPAL FINAL
+# -----------------------
+st.divider()
+
+st.subheader("💰 Passer en Pro")
+
+paypal_button = """
+<script src="https://www.paypal.com/sdk/js?client-id=ASBpxQl2J7S7VTBDBJVRW8t4h8DOIjE9XwHNbM9uTtKgbCs4q97N79A5gn-X76yjb927dCKpHfYfD1r6&currency=EUR"></script>
+
+<div style="display:flex; justify-content:center; margin-top:20px;">
+    <div id="paypal-button-container"></div>
+</div>
+
+<script>
+paypal.Buttons({
+    style: {
+        layout: 'vertical',
+        color: 'blue',
+        shape: 'rect',
+        label: 'paypal'
+    },
+    createOrder: function(data, actions) {
+        return actions.order.create({
+            purchase_units: [{
+                amount: { value: '9.99' }
+            }]
+        });
+    },
+    onApprove: function(data, actions) {
+        return actions.order.capture().then(function() {
+            alert('🚀 Upgrade Pro activé - Bienvenue !');
+        });
+    }
+}).render('#paypal-button-container');
+</script>
+"""
+
+st.components.v1.html(paypal_button, height=350)

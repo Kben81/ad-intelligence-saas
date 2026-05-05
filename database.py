@@ -8,6 +8,7 @@ def init_db():
     conn = sqlite3.connect(DB)
     c = conn.cursor()
 
+    # USERS
     c.execute("""
     CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -18,6 +19,7 @@ def init_db():
     )
     """)
 
+    # ANALYSES
     c.execute("""
     CREATE TABLE IF NOT EXISTS analyses (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -35,6 +37,9 @@ def init_db():
     conn.close()
 
 
+# -----------------------
+# USER SYSTEM
+# -----------------------
 def create_user(username, password):
     conn = sqlite3.connect(DB)
     c = conn.cursor()
@@ -44,7 +49,6 @@ def create_user(username, password):
         INSERT INTO users (username, password, plan, created_at)
         VALUES (?, ?, 'free', ?)
         """, (username, password, str(datetime.now())))
-
         conn.commit()
         return True
     except:
@@ -68,18 +72,20 @@ def login_user(username, password):
     return user
 
 
-def get_user_plan(username):
+def get_plan(username):
     conn = sqlite3.connect(DB)
     c = conn.cursor()
 
     c.execute("SELECT plan FROM users WHERE username=?", (username,))
-    plan = c.fetchone()
+    result = c.fetchone()
 
     conn.close()
+    return result[0] if result else "free"
 
-    return plan[0] if plan else "free"
 
-
+# -----------------------
+# ANALYTICS
+# -----------------------
 def save_analysis(data):
     conn = sqlite3.connect(DB)
     c = conn.cursor()
@@ -103,16 +109,19 @@ def save_analysis(data):
     conn.close()
 
 
-def count_user_analyses(username):
+def get_user_analyses(username):
     conn = sqlite3.connect(DB)
     c = conn.cursor()
 
     c.execute("""
-    SELECT COUNT(*) FROM analyses
+    SELECT keyword, trend, competition, opportunity, platform, date
+    FROM analyses
     WHERE username=?
+    ORDER BY id DESC
+    LIMIT 20
     """, (username,))
 
-    count = c.fetchone()[0]
+    rows = c.fetchall()
     conn.close()
 
-    return count
+    return rows
