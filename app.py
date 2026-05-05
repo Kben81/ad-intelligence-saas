@@ -1,168 +1,113 @@
 import streamlit as st
 import random
-import requests
-from datetime import datetime
 
 from core.trends import get_trend
 from core.scoring import calculate_opportunity
-from database import init_db, create_user, login_user, save_analysis, get_history
 
-st.set_page_config(page_title="Ad Intelligence SaaS", layout="wide")
-
-init_db()
-
-st.title("📊 Ad Intelligence SaaS (LEVEL 8 💰)")
-
-# -----------------------
-# AUTH SYSTEM
-# -----------------------
-menu = st.sidebar.selectbox("Menu", ["Login", "Créer un compte"])
-
-if "user" not in st.session_state:
-    st.session_state["user"] = None
-
-if menu == "Créer un compte":
-    st.subheader("Créer un compte")
-
-    new_user = st.text_input("Username")
-    new_pass = st.text_input("Password", type="password")
-
-    if st.button("Créer"):
-        if create_user(new_user, new_pass):
-            st.success("Compte créé ✔")
-        else:
-            st.error("Utilisateur déjà existant ❌")
-
-    st.stop()
-
-elif menu == "Login":
-    st.subheader("Connexion")
-
-    username = st.text_input("Username")
-    password = st.text_input("Password", type="password")
-
-    if st.button("Se connecter"):
-        if login_user(username, password):
-            st.session_state["user"] = username
-            st.success("Connecté ✔")
-        else:
-            st.error("Identifiants incorrects ❌")
-
-    if not st.session_state["user"]:
-        st.stop()
-
-user = st.session_state["user"]
-
-st.success(f"👤 Connecté : {user}")
-
+st.set_page_config(
+    page_title="Ad Intelligence SaaS",
+    page_icon="📊",
+    layout="wide"
+)
 
 # -----------------------
-# BUZZ
+# HEADER
 # -----------------------
-def get_buzz(keyword):
-    try:
-        url = "https://api.gdeltproject.org/api/v2/doc/doc"
-        params = {
-            "query": keyword,
-            "mode": "timelinevol",
-            "format": "json",
-            "timespan": "7d"
-        }
+st.title("📊 Ad Intelligence SaaS")
+st.caption("Analyse marché + opportunités publicitaires en temps réel")
 
-        r = requests.get(url, params=params, timeout=10)
-
-        if r.status_code != 200:
-            return 10
-
-        data = r.json()
-
-        if "timeline" not in data:
-            return 10
-
-        timeline = data["timeline"]
-
-        if not timeline:
-            return 10
-
-        return len(timeline[0].get("data", [])) * 2
-
-    except:
-        return 10
-
+st.divider()
 
 # -----------------------
 # INPUT
 # -----------------------
-keyword = st.text_input("Mot-clé", "sérum visage")
-
+keyword = st.text_input("🔍 Mot-clé à analyser", "sérum visage")
 
 # -----------------------
-# ANALYSE
+# ACTION
 # -----------------------
-if st.button("🚀 Analyser"):
+if st.button("🚀 Lancer l'analyse"):
 
+    # DATA
     trend = get_trend(keyword)
+    competition = max(5, min(100, int(100 - trend + random.randint(-10, 10))))
+    opportunity, level = calculate_opportunity(trend, competition)
 
-    competition = max(
-        5,
-        min(
-            100,
-            int((100 - trend) * 0.7 + random.randint(5, 20))
-        )
-    )
-
-    buzz = get_buzz(keyword)
-
-    opportunity, level = calculate_opportunity(
-        trend + buzz * 0.3,
-        competition
-    )
-
+    # PLATFORM LOGIC
     if competition < 40 and trend > 40:
-        platform = "Meta Ads"
+        platform = "Meta Ads (Facebook / Instagram)"
     elif trend > 60:
-        platform = "Google Ads"
+        platform = "Google Ads (Search / Shopping)"
     else:
         platform = "TikTok Ads"
 
-    col1, col2, col3 = st.columns(3)
+    # -----------------------
+    # KPI CARDS
+    # -----------------------
+    col1, col2, col3, col4 = st.columns(4)
 
-    col1.metric("📈 Demande", round(trend, 1))
-    col2.metric("📊 Concurrence", competition)
-    col3.metric("🔥 Buzz", buzz)
+    with col1:
+        st.metric("📈 Demande", f"{trend:.1f}")
 
-    st.subheader("🧠 Résultat")
-    st.success(level)
-    st.info(platform)
+    with col2:
+        st.metric("📊 Concurrence", competition)
 
-    save_analysis({
-        "user": user,
-        "keyword": keyword,
-        "trend": trend,
-        "competition": competition,
-        "buzz": buzz,
-        "opportunity": opportunity,
-        "level": level,
-        "platform": platform,
-        "date": str(datetime.now())
-    })
+    with col3:
+        st.metric("🧠 Opportunité", f"{opportunity:.1f}")
 
+    with col4:
+        st.metric("🎯 Plateforme", platform)
 
-# -----------------------
-# HISTORY
-# -----------------------
-st.subheader("📚 Ton historique")
+    st.divider()
 
-rows = get_history(user)
+    # -----------------------
+    # ANALYSIS SECTION
+    # -----------------------
+    st.subheader("🧠 Analyse marché")
 
-for r in rows:
-    st.write({
-        "keyword": r[0],
-        "trend": r[1],
-        "competition": r[2],
-        "buzz": r[3],
-        "opportunity": r[4],
-        "level": r[5],
-        "platform": r[6],
-        "date": r[7]
-    })
+    if opportunity > 70:
+        st.success("🔥 Excellent marché : forte opportunité commerciale")
+    elif opportunity > 40:
+        st.warning("⚖️ Marché moyen : potentiel intéressant mais compétitif")
+    else:
+        st.error("⚠️ Marché difficile : faible opportunité")
+
+    st.info(level)
+
+    st.divider()
+
+    # -----------------------
+    # STRATEGY SECTION
+    # -----------------------
+    st.subheader("📌 Stratégie recommandée")
+
+    colA, colB = st.columns(2)
+
+    with colA:
+        st.markdown("### 🎯 Plateforme pub")
+        st.success(platform)
+
+        st.markdown("### 📊 Niveau de marché")
+        st.write(level)
+
+    with colB:
+        st.markdown("### 💡 Recommandation rapide")
+
+        if platform == "Meta Ads (Facebook / Instagram)":
+            st.write("- Créatifs visuels + UGC")
+            st.write("- Audience large + retargeting")
+
+        elif platform == "Google Ads (Search / Shopping)":
+            st.write("- Mots-clés intention achat")
+            st.write("- Landing page optimisée")
+
+        else:
+            st.write("- Vidéos courtes virales")
+            st.write("- Hook fort dans les 3 premières secondes")
+
+    st.divider()
+
+    # -----------------------
+    # FOOTER INSIGHT
+    # -----------------------
+    st.caption("💡 Version SaaS MVP - Ad Intelligence Engine")

@@ -1,32 +1,31 @@
 import sqlite3
+from datetime import datetime
 
-DB_NAME = "app.db"
+DB = "app.db"
 
 
 def init_db():
-    conn = sqlite3.connect(DB_NAME)
+    conn = sqlite3.connect(DB)
     c = conn.cursor()
 
-    # USERS TABLE
     c.execute("""
     CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         username TEXT UNIQUE,
-        password TEXT
+        password TEXT,
+        plan TEXT DEFAULT 'free',
+        created_at TEXT
     )
     """)
 
-    # ANALYSES TABLE
     c.execute("""
     CREATE TABLE IF NOT EXISTS analyses (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user TEXT,
+        username TEXT,
         keyword TEXT,
         trend REAL,
         competition INTEGER,
-        buzz REAL,
         opportunity REAL,
-        level TEXT,
         platform TEXT,
         date TEXT
     )
@@ -37,11 +36,15 @@ def init_db():
 
 
 def create_user(username, password):
-    conn = sqlite3.connect(DB_NAME)
+    conn = sqlite3.connect(DB)
     c = conn.cursor()
 
     try:
-        c.execute("INSERT INTO users (username, password) VALUES (?, ?)", (username, password))
+        c.execute("""
+        INSERT INTO users (username, password, plan, created_at)
+        VALUES (?, ?, 'free', ?)
+        """, (username, password, str(datetime.now())))
+
         conn.commit()
         return True
     except:
@@ -51,33 +54,47 @@ def create_user(username, password):
 
 
 def login_user(username, password):
-    conn = sqlite3.connect(DB_NAME)
+    conn = sqlite3.connect(DB)
     c = conn.cursor()
 
-    c.execute("SELECT * FROM users WHERE username=? AND password=?", (username, password))
+    c.execute("""
+    SELECT username, plan FROM users
+    WHERE username=? AND password=?
+    """, (username, password))
+
     user = c.fetchone()
+    conn.close()
+
+    return user
+
+
+def get_user_plan(username):
+    conn = sqlite3.connect(DB)
+    c = conn.cursor()
+
+    c.execute("SELECT plan FROM users WHERE username=?", (username,))
+    plan = c.fetchone()
 
     conn.close()
-    return user is not None
+
+    return plan[0] if plan else "free"
 
 
 def save_analysis(data):
-    conn = sqlite3.connect(DB_NAME)
+    conn = sqlite3.connect(DB)
     c = conn.cursor()
 
     c.execute("""
     INSERT INTO analyses (
-        user, keyword, trend, competition,
-        buzz, opportunity, level, platform, date
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        username, keyword, trend, competition,
+        opportunity, platform, date
+    ) VALUES (?, ?, ?, ?, ?, ?, ?)
     """, (
-        data["user"],
+        data["username"],
         data["keyword"],
         data["trend"],
         data["competition"],
-        data["buzz"],
         data["opportunity"],
-        data["level"],
         data["platform"],
         data["date"]
     ))
@@ -86,19 +103,16 @@ def save_analysis(data):
     conn.close()
 
 
-def get_history(user, limit=20):
-    conn = sqlite3.connect(DB_NAME)
+def count_user_analyses(username):
+    conn = sqlite3.connect(DB)
     c = conn.cursor()
 
     c.execute("""
-    SELECT keyword, trend, competition, buzz,
-           opportunity, level, platform, date
-    FROM analyses
-    WHERE user = ?
-    ORDER BY id DESC
-    LIMIT ?
-    """, (user, limit))
+    SELECT COUNT(*) FROM analyses
+    WHERE username=?
+    """, (username,))
 
-    rows = c.fetchall()
+    count = c.fetchone()[0]
     conn.close()
-    return rows
+
+    return count
